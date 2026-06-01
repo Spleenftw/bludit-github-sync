@@ -115,21 +115,32 @@ class pluginBluditGithub extends Plugin
             if (empty($key) || !$this->isConfigured()) {
                 return;
             }
-            // List all files in the article's folder and delete them
-            $prefix   = trim($this->getValue('path'), '/');
-            $dirPath  = ($prefix ? $prefix . '/' : '') . $key;
-            $items    = $this->githubRequest('GET', '/contents/' . $dirPath);
 
-            if (!is_array($items)) {
-                return;
+            $prefix = trim($this->getValue('path'), '/');
+            $base   = ($prefix ? $prefix . '/' : '') . $key;
+
+            // Delete article/index.md
+            $mdPath = $base . '/article/index.md';
+            $sha    = $this->getFileSha($mdPath);
+            if ($sha) {
+                $this->githubRequest('DELETE', '/contents/' . $mdPath, [
+                    'message' => 'Delete: ' . $key,
+                    'sha'     => $sha,
+                    'branch'  => $this->getValue('branch'),
+                ]);
             }
-            foreach ($items as $item) {
-                if ($item['type'] === 'file') {
-                    $this->githubRequest('DELETE', '/contents/' . $item['path'], [
-                        'message' => 'Delete: ' . $key . '/' . $item['name'],
-                        'sha'     => $item['sha'],
-                        'branch'  => $this->getValue('branch'),
-                    ]);
+
+            // Delete all files in img/
+            $items = $this->githubRequest('GET', '/contents/' . $base . '/img');
+            if (is_array($items)) {
+                foreach ($items as $item) {
+                    if ($item['type'] === 'file') {
+                        $this->githubRequest('DELETE', '/contents/' . $item['path'], [
+                            'message' => 'Delete image: ' . $key . '/img/' . $item['name'],
+                            'sha'     => $item['sha'],
+                            'branch'  => $this->getValue('branch'),
+                        ]);
+                    }
                 }
             }
         } catch (Throwable $e) {
@@ -214,7 +225,7 @@ class pluginBluditGithub extends Plugin
                 }
             }
 
-            $repoPath = ($prefix ? $prefix . '/' : '') . $key . '/' . $filename;
+            $repoPath = ($prefix ? $prefix . '/' : '') . $key . '/img/' . $filename;
             $sha      = $this->getFileSha($repoPath);
 
             $data = [
@@ -262,11 +273,11 @@ class pluginBluditGithub extends Plugin
     {
         $content = $rawContent ?? $page->content();
 
-        // Rewrite absolute Bludit upload URLs to relative filenames
-        // e.g. https://domain/bl-content/uploads/pages/UUID/image.png → image.png
+        // Rewrite absolute Bludit upload URLs to relative img/ paths
+        // e.g. https://domain/bl-content/uploads/pages/UUID/image.png → ../img/image.png
         $content = preg_replace(
             '/https?:\/\/[^\/]+\/bl-content\/uploads\/pages\/[^\/]+\/([^"\')\s<>]+)/',
-            '$1',
+            '../img/$1',
             $content
         );
 
@@ -313,7 +324,7 @@ class pluginBluditGithub extends Plugin
     private function getFilePath($key)
     {
         $prefix = trim($this->getValue('path'), '/');
-        return ($prefix ? $prefix . '/' : '') . $key . '/index.md';
+        return ($prefix ? $prefix . '/' : '') . $key . '/article/index.md';
     }
 
     private function getFileSha($filePath)

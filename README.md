@@ -4,16 +4,21 @@ A [Bludit](https://www.bludit.com) plugin that automatically exports your blog a
 
 ## What it does
 
-Whenever you create, update, or delete an article in Bludit, the plugin pushes the change to a GitHub repository via the GitHub API. Each article is exported as its own folder containing an `index.md` file:
+Whenever you create, update, or delete an article in Bludit, the plugin pushes the change to a GitHub repository via the GitHub API. Each article is exported as its own folder, with the markdown file inside `article/` and images inside `img/`:
 
 ```
 my-article/
-  index.md
+  article/
+    index.md
+  img/
+    photo.png
+    screenshot.jpg
 another-post/
-  index.md
+  article/
+    index.md
 ```
 
-Each `index.md` contains a YAML frontmatter block followed by the article content:
+Each `index.md` contains a YAML frontmatter block followed by the article content. Image references are written as relative paths from the `article/` subfolder:
 
 ```markdown
 ---
@@ -28,7 +33,7 @@ description: "Optional meta description"
 category: tech
 ---
 
-Article content here...
+Article content with images like ![](../img/photo.png)
 ```
 
 ## Installation
@@ -54,8 +59,8 @@ The settings page includes an **Export all articles now** button that pushes all
 
 ## Behavior
 
-- **On article save:** the article's `index.md` is created or updated in the repository.
-- **On article delete:** the article's `index.md` is deleted from the repository (GitHub removes the empty folder automatically).
+- **On article save:** `article/index.md` is created or updated, and all images referenced in the content are uploaded to `img/`.
+- **On article delete:** both `article/index.md` and all files in `img/` are deleted (GitHub removes the empty folders automatically).
 - **Errors** are displayed in the plugin settings panel and never interfere with Bludit's own save process.
 
 ## Requirements

@@ -81,49 +81,51 @@ class pluginBluditGithub extends Plugin
 
     public function afterPageCreate($key)
     {
-        if (empty($key)) {
-            return;
-        }
         try {
+            if (empty($key) || !$this->isConfigured()) {
+                return;
+            }
             $page = new Page($key);
             if ($this->shouldExport($page)) {
                 $this->exportPage($page);
             }
-        } catch (Exception $e) {
-            // page not found
+        } catch (Throwable $e) {
+            $this->setStatus('Error (afterPageCreate): ' . $e->getMessage());
         }
     }
 
     public function afterPageModify($key)
     {
-        if (empty($key)) {
-            return;
-        }
         try {
+            if (empty($key) || !$this->isConfigured()) {
+                return;
+            }
             $page = new Page($key);
             if ($this->shouldExport($page)) {
                 $this->exportPage($page);
             }
-        } catch (Exception $e) {
-            // page not found
+        } catch (Throwable $e) {
+            $this->setStatus('Error (afterPageModify): ' . $e->getMessage());
         }
     }
 
     public function afterPageDelete($key)
     {
-        if (!$this->isConfigured() || empty($key)) {
-            return;
-        }
-
-        $filePath = $this->getFilePath($key);
-        $sha      = $this->getFileSha($filePath);
-
-        if ($sha) {
-            $this->githubRequest('DELETE', '/contents/' . $filePath, [
-                'message' => 'Delete: ' . $key,
-                'sha'     => $sha,
-                'branch'  => $this->getValue('branch'),
-            ]);
+        try {
+            if (empty($key) || !$this->isConfigured()) {
+                return;
+            }
+            $filePath = $this->getFilePath($key);
+            $sha      = $this->getFileSha($filePath);
+            if ($sha) {
+                $this->githubRequest('DELETE', '/contents/' . $filePath, [
+                    'message' => 'Delete: ' . $key,
+                    'sha'     => $sha,
+                    'branch'  => $this->getValue('branch'),
+                ]);
+            }
+        } catch (Throwable $e) {
+            $this->setStatus('Error (afterPageDelete): ' . $e->getMessage());
         }
     }
 

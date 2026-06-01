@@ -79,10 +79,9 @@ class pluginBluditGithub extends Plugin
         }
     }
 
-    public function afterPageCreate()
+    public function afterPageCreate($key)
     {
-        $key = $this->getAffectedPageKey();
-        if (!$key) {
+        if (empty($key)) {
             return;
         }
         try {
@@ -95,10 +94,9 @@ class pluginBluditGithub extends Plugin
         }
     }
 
-    public function afterPageModify()
+    public function afterPageModify($key)
     {
-        $key = $this->getAffectedPageKey();
-        if (!$key) {
+        if (empty($key)) {
             return;
         }
         try {
@@ -111,39 +109,21 @@ class pluginBluditGithub extends Plugin
         }
     }
 
-    public function afterPageDelete()
+    public function afterPageDelete($key)
     {
-        if (!$this->isConfigured()) {
+        if (!$this->isConfigured() || empty($key)) {
             return;
         }
 
-        $currentKeys  = $this->getAllPageKeys();
-        $exportPath   = trim($this->getValue('path'), '/');
-        $listEndpoint = '/contents/' . ($exportPath ?: '');
+        $filePath = $this->getFilePath($key);
+        $sha      = $this->getFileSha($filePath);
 
-        $items = $this->githubRequest('GET', $listEndpoint);
-        if (!is_array($items)) {
-            return;
-        }
-
-        foreach ($items as $item) {
-            if (!isset($item['type']) || $item['type'] !== 'dir') {
-                continue;
-            }
-            $key = $item['name'];
-            if (in_array($key, $currentKeys, true)) {
-                continue;
-            }
-            // Directory is no longer a Bludit page — delete its index.md
-            $indexPath = $item['path'] . '/index.md';
-            $sha       = $this->getFileSha($indexPath);
-            if ($sha) {
-                $this->githubRequest('DELETE', '/contents/' . $indexPath, [
-                    'message' => 'Delete: ' . $key,
-                    'sha'     => $sha,
-                    'branch'  => $this->getValue('branch'),
-                ]);
-            }
+        if ($sha) {
+            $this->githubRequest('DELETE', '/contents/' . $filePath, [
+                'message' => 'Delete: ' . $key,
+                'sha'     => $sha,
+                'branch'  => $this->getValue('branch'),
+            ]);
         }
     }
 
@@ -322,42 +302,6 @@ class pluginBluditGithub extends Plugin
         return $decoded;
     }
 
-    private function getAffectedPageKey()
-    {
-        // Bludit puts the slug in POST on page save
-        foreach (['slug', 'key', 'friendlyURL'] as $field) {
-            if (!empty($_POST[$field])) {
-                return Sanitize::slug($_POST[$field]);
-            }
-        }
-
-        // Fallback: most recently modified page directory (Bludit stores pages as index.txt)
-        if (!defined('PATH_PAGES') || !is_dir(PATH_PAGES)) {
-            return null;
-        }
-
-        $newest     = null;
-        $newestTime = 0;
-
-        foreach (glob(PATH_PAGES . '*', GLOB_ONLYDIR) as $dir) {
-            $indexFile = $dir . DS . 'index.txt';
-            if (file_exists($indexFile)) {
-                $mtime = filemtime($indexFile);
-                if ($mtime > $newestTime) {
-                    $newestTime = $mtime;
-                    $newest     = basename($dir);
-                }
-            }
-        }
-
-        return $newest;
-    }
-
-    private function getAllPageKeys()
-    {
-        global $pages;
-        return $pages->getList(1, 9999, true, true, true, true, false);
-    }
 
     private function isConfigured()
     {

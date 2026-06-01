@@ -1,0 +1,10 @@
+{
+	"author": "interlope",
+	"email": "",
+	"website": "https://github.com/interlope/bludit-github",
+	"version": "1.0.0",
+	"releaseDate": "2026-06-01",
+	"license": "MIT",
+	"compatible": "3.20",
+	"notes": "Export Bludit articles to a GitHub repository as Markdown files with YAML frontmatter."
+}

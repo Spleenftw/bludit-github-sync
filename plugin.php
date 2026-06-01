@@ -9,7 +9,7 @@ class pluginBluditGithub extends Plugin
             'owner'        => '',
             'repo'         => '',
             'branch'       => 'main',
-            'path'         => 'posts',
+            'path'         => '',
             'exportDrafts' => false,
         ];
     }
@@ -46,9 +46,9 @@ class pluginBluditGithub extends Plugin
         $html .= '</div>';
 
         $html .= '<div>';
-        $html .= '<label>Export Path</label>';
-        $html .= '<input name="path" type="text" value="' . htmlspecialchars($path) . '" placeholder="posts">';
-        $html .= '<span class="tip">Directory in the repo where articles are written (e.g. <code>posts</code>). Leave empty for root.</span>';
+        $html .= '<label>Path Prefix <em>(optional)</em></label>';
+        $html .= '<input name="path" type="text" value="' . htmlspecialchars($path) . '" placeholder="Leave empty to export at repo root">';
+        $html .= '<span class="tip">Each article is exported as <code>{key}/index.md</code>. Set a prefix (e.g. <code>articles</code>) to nest under a subfolder.</span>';
         $html .= '</div>';
 
         $html .= '<div>';
@@ -117,27 +117,30 @@ class pluginBluditGithub extends Plugin
             return;
         }
 
-        $currentKeys = $this->getAllPageKeys();
-        $exportPath  = trim($this->getValue('path'), '/');
-        $endpoint    = '/contents/' . ($exportPath ?: '');
+        $currentKeys  = $this->getAllPageKeys();
+        $exportPath   = trim($this->getValue('path'), '/');
+        $listEndpoint = '/contents/' . ($exportPath ?: '');
 
-        $files = $this->githubRequest('GET', $endpoint);
-        if (!is_array($files)) {
+        $items = $this->githubRequest('GET', $listEndpoint);
+        if (!is_array($items)) {
             return;
         }
 
-        foreach ($files as $file) {
-            if (!isset($file['type']) || $file['type'] !== 'file') {
+        foreach ($items as $item) {
+            if (!isset($item['type']) || $item['type'] !== 'dir') {
                 continue;
             }
-            if (substr($file['name'], -3) !== '.md') {
+            $key = $item['name'];
+            if (in_array($key, $currentKeys, true)) {
                 continue;
             }
-            $key = substr($file['name'], 0, -3);
-            if (!in_array($key, $currentKeys, true)) {
-                $this->githubRequest('DELETE', '/contents/' . $file['path'], [
+            // Directory is no longer a Bludit page — delete its index.md
+            $indexPath = $item['path'] . '/index.md';
+            $sha       = $this->getFileSha($indexPath);
+            if ($sha) {
+                $this->githubRequest('DELETE', '/contents/' . $indexPath, [
                     'message' => 'Delete: ' . $key,
-                    'sha'     => $file['sha'],
+                    'sha'     => $sha,
                     'branch'  => $this->getValue('branch'),
                 ]);
             }
@@ -153,8 +156,9 @@ class pluginBluditGithub extends Plugin
 
     private function exportPage($page, $saveStatus = true)
     {
-        $content  = $this->buildMarkdown($page);
-        $filePath = $this->getFilePath($page->key());
+        $key      = $page->getValue('key');
+        $content  = $this->buildMarkdown($page, $key);
+        $filePath = $this->getFilePath($key);
         $sha      = $this->getFileSha($filePath);
 
         $data = [
@@ -201,42 +205,38 @@ class pluginBluditGithub extends Plugin
         $this->setStatus(date('Y-m-d H:i:s') . " — Bulk export: {$count} articles pushed.");
     }
 
-    private function buildMarkdown($page)
+    private function buildMarkdown($page, $key)
     {
-        // Prefer raw content (Markdown as typed); fall back to rendered HTML
-        $content = $page->getValue('content');
-        if (empty($content)) {
-            $content = $page->content();
-        }
+        // TinyMCE stores HTML — content() returns the full rendered content
+        $content = $page->content();
 
-        // Tags
-        $tags     = $page->tags();
+        // Tags: getValue returns comma-separated string in Bludit
+        $rawTags  = $page->getValue('tags');
         $tagLines = '';
-        if (!empty($tags)) {
-            foreach ($tags as $tag) {
-                $tagName  = is_object($tag) ? $tag->name() : (string)$tag;
-                $tagLines .= "\n  - " . $tagName;
+        if (!empty($rawTags)) {
+            $tagArray = array_map('trim', explode(',', $rawTags));
+            foreach ($tagArray as $tag) {
+                if ($tag !== '') {
+                    $tagLines .= "\n  - " . $tag;
+                }
             }
         }
 
         $fm  = "---\n";
-        $fm .= 'title: "' . addslashes($page->title()) . "\"\n";
+        $fm .= 'title: "' . str_replace('"', '\"', $page->title()) . "\"\n";
         $fm .= 'date: ' . date('Y-m-d', strtotime($page->getValue('dateRaw'))) . "\n";
-        $fm .= 'slug: ' . $page->key() . "\n";
+        $fm .= 'slug: ' . $key . "\n";
         $fm .= 'status: ' . $page->getValue('status') . "\n";
         $fm .= 'tags:' . ($tagLines ?: ' []') . "\n";
 
-        $description = $page->description();
+        $description = $page->getValue('description');
         if (!empty($description)) {
-            $fm .= 'description: "' . addslashes($description) . "\"\n";
+            $fm .= 'description: "' . str_replace('"', '\"', $description) . "\"\n";
         }
 
-        $category = $page->category();
-        if (!empty($category)) {
-            $catKey = is_object($category) ? $category->key() : (string)$category;
-            if ($catKey && $catKey !== 'uncategorized') {
-                $fm .= 'category: ' . $catKey . "\n";
-            }
+        $category = $page->getValue('category');
+        if (!empty($category) && $category !== 'uncategorized') {
+            $fm .= 'category: ' . $category . "\n";
         }
 
         $cover = $page->coverImage();
@@ -251,8 +251,8 @@ class pluginBluditGithub extends Plugin
 
     private function getFilePath($key)
     {
-        $exportPath = trim($this->getValue('path'), '/');
-        return ($exportPath ? $exportPath . '/' : '') . $key . '.md';
+        $prefix = trim($this->getValue('path'), '/');
+        return ($prefix ? $prefix . '/' : '') . $key . '/index.md';
     }
 
     private function getFileSha($filePath)
@@ -305,7 +305,7 @@ class pluginBluditGithub extends Plugin
             return false;
         }
 
-        // 404 on GET means the file doesn't exist yet — not an error
+        // 404 on GET = file/dir doesn't exist yet, not an error
         if ($httpCode === 404) {
             return null;
         }
@@ -330,7 +330,7 @@ class pluginBluditGithub extends Plugin
             }
         }
 
-        // Fallback: most recently modified page directory
+        // Fallback: most recently modified page directory (Bludit stores pages as index.txt)
         if (!defined('PATH_PAGES') || !is_dir(PATH_PAGES)) {
             return null;
         }
@@ -339,7 +339,7 @@ class pluginBluditGithub extends Plugin
         $newestTime = 0;
 
         foreach (glob(PATH_PAGES . '*', GLOB_ONLYDIR) as $dir) {
-            $indexFile = $dir . DS . 'index.php';
+            $indexFile = $dir . DS . 'index.txt';
             if (file_exists($indexFile)) {
                 $mtime = filemtime($indexFile);
                 if ($mtime > $newestTime) {

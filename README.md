@@ -41,7 +41,7 @@ Article content here...
 
 | Field | Description |
 |---|---|
-| Personal Access Token | A GitHub token with `repo` scope. [Generate one here](https://github.com/settings/tokens/new). |
+| Personal Access Token | A GitHub token with `public_repo` scope (or `repo` if the repository is private). [Generate one here](https://github.com/settings/tokens/new). |
 | Repository Owner | Your GitHub username or organization name. |
 | Repository Name | The target repository (e.g. `my-blog`). |
 | Branch | Branch to push to (default: `main`). |

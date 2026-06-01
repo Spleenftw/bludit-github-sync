@@ -27,7 +27,7 @@ class pluginBluditGithub extends Plugin
         $html  = '<div>';
         $html .= '<label>GitHub Personal Access Token</label>';
         $html .= '<input name="token" type="password" value="' . htmlspecialchars($token) . '" placeholder="ghp_...">';
-        $html .= '<span class="tip">Requires <strong>repo</strong> scope. <a href="https://github.com/settings/tokens/new" target="_blank">Generate token</a></span>';
+        $html .= '<span class="tip">Requires <strong>public_repo</strong> scope (or <strong>repo</strong> for private repositories). <a href="https://github.com/settings/tokens/new" target="_blank">Generate token</a></span>';
         $html .= '</div>';
 
         $html .= '<div>';
@@ -115,14 +115,22 @@ class pluginBluditGithub extends Plugin
             if (empty($key) || !$this->isConfigured()) {
                 return;
             }
-            $filePath = $this->getFilePath($key);
-            $sha      = $this->getFileSha($filePath);
-            if ($sha) {
-                $this->githubRequest('DELETE', '/contents/' . $filePath, [
-                    'message' => 'Delete: ' . $key,
-                    'sha'     => $sha,
-                    'branch'  => $this->getValue('branch'),
-                ]);
+            // List all files in the article's folder and delete them
+            $prefix   = trim($this->getValue('path'), '/');
+            $dirPath  = ($prefix ? $prefix . '/' : '') . $key;
+            $items    = $this->githubRequest('GET', '/contents/' . $dirPath);
+
+            if (!is_array($items)) {
+                return;
+            }
+            foreach ($items as $item) {
+                if ($item['type'] === 'file') {
+                    $this->githubRequest('DELETE', '/contents/' . $item['path'], [
+                        'message' => 'Delete: ' . $key . '/' . $item['name'],
+                        'sha'     => $item['sha'],
+                        'branch'  => $this->getValue('branch'),
+                    ]);
+                }
             }
         } catch (Throwable $e) {
             $this->setStatus('Error (afterPageDelete): ' . $e->getMessage());
@@ -154,8 +162,45 @@ class pluginBluditGithub extends Plugin
 
         $result = $this->githubRequest('PUT', '/contents/' . $filePath, $data);
 
-        if ($result !== false && $saveStatus) {
-            $this->setStatus(date('Y-m-d H:i:s') . ' — Exported: ' . $page->title());
+        if ($result !== false) {
+            $this->exportImages($key);
+            if ($saveStatus) {
+                $this->setStatus(date('Y-m-d H:i:s') . ' — Exported: ' . $page->title());
+            }
+        }
+    }
+
+    private function exportImages($key)
+    {
+        if (!defined('PATH_UPLOADS_PAGES')) {
+            return;
+        }
+
+        $dir = PATH_UPLOADS_PAGES . $key;
+        if (!is_dir($dir)) {
+            return;
+        }
+
+        $prefix = trim($this->getValue('path'), '/');
+
+        foreach (glob($dir . DS . '*') as $file) {
+            if (!is_file($file)) {
+                continue;
+            }
+            $filename  = basename($file);
+            $repoPath  = ($prefix ? $prefix . '/' : '') . $key . '/' . $filename;
+            $sha       = $this->getFileSha($repoPath);
+
+            $data = [
+                'message' => ($sha ? 'Update' : 'Add') . ' image: ' . $key . '/' . $filename,
+                'content' => base64_encode(file_get_contents($file)),
+                'branch'  => $this->getValue('branch'),
+            ];
+            if ($sha) {
+                $data['sha'] = $sha;
+            }
+
+            $this->githubRequest('PUT', '/contents/' . $repoPath, $data);
         }
     }
 
@@ -189,10 +234,17 @@ class pluginBluditGithub extends Plugin
 
     private function buildMarkdown($page, $key)
     {
-        // TinyMCE stores HTML — content() returns the full rendered content
         $content = $page->content();
 
-        // Tags: getValue returns an array in Bludit
+        // Rewrite absolute Bludit upload URLs to relative filenames
+        // e.g. https://domain/bl-content/uploads/pages/UUID/image.png → image.png
+        $content = preg_replace(
+            '/https?:\/\/[^\/]+\/bl-content\/uploads\/pages\/[^\/]+\/([^"\')\s]+)/',
+            '$1',
+            $content
+        );
+
+        // Tags
         $rawTags  = $page->getValue('tags');
         $tagLines = '';
         if (!empty($rawTags)) {
@@ -303,7 +355,6 @@ class pluginBluditGithub extends Plugin
 
         return $decoded;
     }
-
 
     private function isConfigured()
     {

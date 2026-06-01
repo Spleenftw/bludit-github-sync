@@ -1,0 +1,6 @@
+{
+	"plugin-data": {
+		"name": "GitHub Export",
+		"description": "Export Bludit articles to a GitHub repository as Markdown files with YAML frontmatter."
+	}
+}

@@ -148,7 +148,7 @@ class pluginBluditGithub extends Plugin
 
     private function shouldExport($page)
     {
-        return $page->status() !== 'draft' || $this->getValue('exportDrafts');
+        return $page->getValue('status') !== 'draft' || $this->getValue('exportDrafts');
     }
 
     private function exportPage($page, $saveStatus = true)
@@ -223,7 +223,7 @@ class pluginBluditGithub extends Plugin
         $fm .= 'title: "' . addslashes($page->title()) . "\"\n";
         $fm .= 'date: ' . date('Y-m-d', strtotime($page->getValue('dateRaw'))) . "\n";
         $fm .= 'slug: ' . $page->key() . "\n";
-        $fm .= 'status: ' . $page->status() . "\n";
+        $fm .= 'status: ' . $page->getValue('status') . "\n";
         $fm .= 'tags:' . ($tagLines ?: ' []') . "\n";
 
         $description = $page->description();

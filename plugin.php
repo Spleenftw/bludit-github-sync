@@ -210,12 +210,13 @@ class pluginBluditGithub extends Plugin
         // TinyMCE stores HTML — content() returns the full rendered content
         $content = $page->content();
 
-        // Tags: getValue returns comma-separated string in Bludit
+        // Tags: getValue returns an array in Bludit
         $rawTags  = $page->getValue('tags');
         $tagLines = '';
         if (!empty($rawTags)) {
-            $tagArray = array_map('trim', explode(',', $rawTags));
+            $tagArray = is_array($rawTags) ? $rawTags : array_map('trim', explode(',', $rawTags));
             foreach ($tagArray as $tag) {
+                $tag = trim((string)$tag);
                 if ($tag !== '') {
                     $tagLines .= "\n  - " . $tag;
                 }

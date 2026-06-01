@@ -146,8 +146,13 @@ class pluginBluditGithub extends Plugin
 
     private function exportPage($page, $saveStatus = true)
     {
-        $key      = $page->getValue('key');
-        $content  = $this->buildMarkdown($page, $key);
+        $key        = $page->getValue('key');
+        $rawContent = $page->content();
+
+        // Export images using URLs found in the content (before rewriting)
+        $this->exportImages($key, $rawContent);
+
+        $content  = $this->buildMarkdown($page, $key, $rawContent);
         $filePath = $this->getFilePath($key);
         $sha      = $this->getFileSha($filePath);
 
@@ -162,38 +167,59 @@ class pluginBluditGithub extends Plugin
 
         $result = $this->githubRequest('PUT', '/contents/' . $filePath, $data);
 
-        if ($result !== false) {
-            $this->exportImages($key);
-            if ($saveStatus) {
-                $this->setStatus(date('Y-m-d H:i:s') . ' — Exported: ' . $page->title());
-            }
+        if ($result !== false && $saveStatus) {
+            $this->setStatus(date('Y-m-d H:i:s') . ' — Exported: ' . $page->title());
         }
     }
 
-    private function exportImages($key)
+    private function exportImages($key, $content)
     {
         if (!defined('PATH_UPLOADS_PAGES')) {
             return;
         }
 
-        $dir = PATH_UPLOADS_PAGES . $key;
-        if (!is_dir($dir)) {
+        // Extract every Bludit upload URL from the content.
+        // The UUID in the URL is the actual storage directory — it may differ
+        // from the page key's symlink, so we resolve it directly from the URL.
+        preg_match_all(
+            '/https?:\/\/[^\/]+\/bl-content\/uploads\/pages\/([^\/]+)\/([^"\')\s<>]+)/',
+            $content,
+            $matches,
+            PREG_SET_ORDER
+        );
+
+        if (empty($matches)) {
             return;
         }
 
         $prefix = trim($this->getValue('path'), '/');
+        $seen   = [];
 
-        foreach (glob($dir . DS . '*') as $file) {
-            if (!is_file($file)) {
+        foreach ($matches as $match) {
+            $uuid     = $match[1];
+            $filename = $match[2];
+
+            if (isset($seen[$filename])) {
                 continue;
             }
-            $filename  = basename($file);
-            $repoPath  = ($prefix ? $prefix . '/' : '') . $key . '/' . $filename;
-            $sha       = $this->getFileSha($repoPath);
+            $seen[$filename] = true;
+
+            // Resolve the file using the UUID path from the URL
+            $localPath = PATH_UPLOADS_PAGES . $uuid . DS . $filename;
+            if (!file_exists($localPath)) {
+                // Fallback: try via the page key symlink
+                $localPath = PATH_UPLOADS_PAGES . $key . DS . $filename;
+                if (!file_exists($localPath)) {
+                    continue;
+                }
+            }
+
+            $repoPath = ($prefix ? $prefix . '/' : '') . $key . '/' . $filename;
+            $sha      = $this->getFileSha($repoPath);
 
             $data = [
                 'message' => ($sha ? 'Update' : 'Add') . ' image: ' . $key . '/' . $filename,
-                'content' => base64_encode(file_get_contents($file)),
+                'content' => base64_encode(file_get_contents($localPath)),
                 'branch'  => $this->getValue('branch'),
             ];
             if ($sha) {
@@ -232,14 +258,14 @@ class pluginBluditGithub extends Plugin
         $this->setStatus(date('Y-m-d H:i:s') . " — Bulk export: {$count} articles pushed.");
     }
 
-    private function buildMarkdown($page, $key)
+    private function buildMarkdown($page, $key, $rawContent = null)
     {
-        $content = $page->content();
+        $content = $rawContent ?? $page->content();
 
         // Rewrite absolute Bludit upload URLs to relative filenames
         // e.g. https://domain/bl-content/uploads/pages/UUID/image.png → image.png
         $content = preg_replace(
-            '/https?:\/\/[^\/]+\/bl-content\/uploads\/pages\/[^\/]+\/([^"\')\s]+)/',
+            '/https?:\/\/[^\/]+\/bl-content\/uploads\/pages\/[^\/]+\/([^"\')\s<>]+)/',
             '$1',
             $content
         );

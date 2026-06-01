@@ -185,13 +185,6 @@ class pluginBluditGithub extends Plugin
 
     private function exportImages($key, $content)
     {
-        if (!defined('PATH_UPLOADS_PAGES')) {
-            return;
-        }
-
-        // Extract every Bludit upload URL from the content.
-        // The UUID in the URL is the actual storage directory — it may differ
-        // from the page key's symlink, so we resolve it directly from the URL.
         preg_match_all(
             '/https?:\/\/[^\/]+\/bl-content\/uploads\/pages\/([^\/]+)\/([^"\')\s<>]+)/',
             $content,
@@ -207,6 +200,7 @@ class pluginBluditGithub extends Plugin
         $seen   = [];
 
         foreach ($matches as $match) {
+            $fullUrl  = $match[0];
             $uuid     = $match[1];
             $filename = $match[2];
 
@@ -215,22 +209,17 @@ class pluginBluditGithub extends Plugin
             }
             $seen[$filename] = true;
 
-            // Resolve the file using the UUID path from the URL
-            $localPath = PATH_UPLOADS_PAGES . $uuid . DS . $filename;
-            if (!file_exists($localPath)) {
-                // Fallback: try via the page key symlink
-                $localPath = PATH_UPLOADS_PAGES . $key . DS . $filename;
-                if (!file_exists($localPath)) {
-                    continue;
-                }
+            $imageData = $this->readImageData($key, $uuid, $filename, $fullUrl);
+            if ($imageData === null) {
+                continue;
             }
 
             $repoPath = ($prefix ? $prefix . '/' : '') . $key . '/img/' . $filename;
             $sha      = $this->getFileSha($repoPath);
 
             $data = [
-                'message' => ($sha ? 'Update' : 'Add') . ' image: ' . $key . '/' . $filename,
-                'content' => base64_encode(file_get_contents($localPath)),
+                'message' => ($sha ? 'Update' : 'Add') . ' image: ' . $key . '/img/' . $filename,
+                'content' => base64_encode($imageData),
                 'branch'  => $this->getValue('branch'),
             ];
             if ($sha) {
@@ -239,6 +228,34 @@ class pluginBluditGithub extends Plugin
 
             $this->githubRequest('PUT', '/contents/' . $repoPath, $data);
         }
+    }
+
+    private function readImageData($key, $uuid, $filename, $fallbackUrl)
+    {
+        // Try filesystem first (UUID path, then page key symlink)
+        if (defined('PATH_UPLOADS_PAGES')) {
+            foreach ([PATH_UPLOADS_PAGES . $uuid . DS . $filename,
+                      PATH_UPLOADS_PAGES . $key  . DS . $filename] as $path) {
+                if (file_exists($path)) {
+                    return file_get_contents($path);
+                }
+            }
+        }
+
+        // Fall back to fetching the image from the live URL
+        $ch = curl_init($fallbackUrl);
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_FOLLOWLOCATION => true,
+            CURLOPT_TIMEOUT        => 15,
+            CURLOPT_SSL_VERIFYPEER => true,
+            CURLOPT_USERAGENT      => 'Bludit-GitHub-Export',
+        ]);
+        $data     = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        return ($data !== false && $httpCode === 200) ? $data : null;
     }
 
     private function bulkExport()
@@ -278,6 +295,31 @@ class pluginBluditGithub extends Plugin
         $content = preg_replace(
             '/https?:\/\/[^\/]+\/bl-content\/uploads\/pages\/[^\/]+\/([^"\')\s<>]+)/',
             '../img/$1',
+            $content
+        );
+
+        // Unwrap carousel code blocks: fenced blocks containing only image lines
+        // become plain image lists so GitHub renders them instead of showing raw text.
+        $content = preg_replace_callback(
+            '/^```[^\n]*\n(.*?)^```[ \t]*$/ms',
+            function ($m) {
+                $lines      = explode("\n", $m[1]);
+                $imageLines = [];
+                foreach ($lines as $line) {
+                    $trimmed = trim($line);
+                    if ($trimmed === '') {
+                        continue;
+                    }
+                    if (!preg_match('/^!\[[^\]]*\]\([^)]+\)$/', $trimmed)) {
+                        return $m[0]; // contains non-image content — leave the block intact
+                    }
+                    $imageLines[] = $trimmed;
+                }
+                if (empty($imageLines)) {
+                    return $m[0];
+                }
+                return implode("\n", $imageLines) . "\n";
+            },
             $content
         );
 

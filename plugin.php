@@ -53,14 +53,12 @@ class pluginBluditGithub extends Plugin
         $html .= '</div>';
 
         $html .= '<div>';
-        $html .= '<label><input name="exportDrafts" type="hidden" value="0">';
-        $html .= '<input name="exportDrafts" type="checkbox" value="1" ' . $exportDrafts . '> Export draft articles</label>';
+        $html .= '<label><input name="exportDrafts" type="checkbox" value="1" ' . $exportDrafts . '> Export draft articles</label>';
         $html .= '</div>';
 
         $autoExport   = $this->getValue('autoExport') ? 'checked' : '';
         $html .= '<div>';
-        $html .= '<label><input name="autoExport" type="hidden" value="0">';
-        $html .= '<input name="autoExport" type="checkbox" value="1" ' . $autoExport . '> Auto-export on save <em>(uncheck to only use manual bulk export)</em></label>';
+        $html .= '<label><input name="autoExport" type="checkbox" value="1" ' . $autoExport . '> Auto-export on save <em>(uncheck to only use manual bulk export)</em></label>';
         $html .= '</div>';
 
         $html .= '<div style="margin-top:1.5em;padding-top:1em;border-top:1px solid #eee">';
@@ -81,6 +79,11 @@ class pluginBluditGithub extends Plugin
     public function post()
     {
         parent::post();
+
+        // Ensure checkboxes are properly saved as boolean (Bludit might store them as strings)
+        $this->db['exportDrafts'] = (isset($_POST['exportDrafts']) && $_POST['exportDrafts']) ? true : false;
+        $this->db['autoExport']   = (isset($_POST['autoExport']) && $_POST['autoExport']) ? true : false;
+        $this->dbSave();
 
         if (!empty($_POST['bulkExport'])) {
             $this->bulkExport();
@@ -160,7 +163,11 @@ class pluginBluditGithub extends Plugin
 
     private function shouldExport($page)
     {
-        return $page->getValue('status') !== 'draft' || $this->getValue('exportDrafts');
+        $isDraft          = $page->getValue('status') === 'draft';
+        $exportDraftsVal  = $this->getValue('exportDrafts');
+        $shouldExportDraft = ($exportDraftsVal === true || $exportDraftsVal === '1' || $exportDraftsVal === 1);
+
+        return (!$isDraft) || $shouldExportDraft;
     }
 
     private function exportPage($page, $saveStatus = true)

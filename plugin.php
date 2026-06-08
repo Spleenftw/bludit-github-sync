@@ -5,25 +5,26 @@ class pluginBluditGithub extends Plugin
     public function init()
     {
         $this->dbFields = [
-            'token'        => '',
-            'owner'        => '',
-            'repo'         => '',
-            'branch'       => 'main',
-            'path'         => '',
-            'exportDrafts' => false,
-            'autoExport'   => true,
+            'token'                 => '',
+            'owner'                 => '',
+            'repo'                  => '',
+            'branch'                => 'main',
+            'path'                  => '',
+            'exportDraftsAuto'      => false,
+            'exportPublishedAuto'   => true,
         ];
     }
 
     public function form()
     {
-        $token        = $this->getValue('token');
-        $owner        = $this->getValue('owner');
-        $repo         = $this->getValue('repo');
-        $branch       = $this->getValue('branch');
-        $path         = $this->getValue('path');
-        $exportDrafts = $this->getValue('exportDrafts') ? 'checked' : '';
-        $status       = $this->getStatus();
+        $token                = $this->getValue('token');
+        $owner                = $this->getValue('owner');
+        $repo                 = $this->getValue('repo');
+        $branch               = $this->getValue('branch');
+        $path                 = $this->getValue('path');
+        $exportDraftsAuto     = $this->getValue('exportDraftsAuto') ? 'checked' : '';
+        $exportPublishedAuto  = $this->getValue('exportPublishedAuto') ? 'checked' : '';
+        $status               = $this->getStatus();
 
         $html  = '<div>';
         $html .= '<label>GitHub Personal Access Token</label>';
@@ -49,22 +50,23 @@ class pluginBluditGithub extends Plugin
         $html .= '<div>';
         $html .= '<label>Path Prefix <em>(optional)</em></label>';
         $html .= '<input name="path" type="text" value="' . htmlspecialchars($path) . '" placeholder="Leave empty to export at repo root">';
-        $html .= '<span class="tip">Each article is exported as <code>{key}/index.md</code>. Set a prefix (e.g. <code>articles</code>) to nest under a subfolder.</span>';
+        $html .= '<span class="tip">Each article is exported as <code>{key}/content/index.md</code>. Set a prefix (e.g. <code>articles</code>) to nest under a subfolder.</span>';
         $html .= '</div>';
 
+        $html .= '<div style="margin-top:1.5em;padding-top:1em;border-top:1px solid #eee">';
+        $html .= '<label>Auto-export settings</label>';
         $html .= '<div>';
-        $html .= '<label><input name="exportDrafts" type="checkbox" value="1" ' . $exportDrafts . '> Export draft articles</label>';
+        $html .= '<label><input name="exportDraftsAuto" type="checkbox" value="1" ' . $exportDraftsAuto . '> Auto-export draft articles on save</label>';
         $html .= '</div>';
-
-        $autoExport   = $this->getValue('autoExport') ? 'checked' : '';
         $html .= '<div>';
-        $html .= '<label><input name="autoExport" type="checkbox" value="1" ' . $autoExport . '> Auto-export on save <em>(uncheck to only use manual bulk export)</em></label>';
+        $html .= '<label><input name="exportPublishedAuto" type="checkbox" value="1" ' . $exportPublishedAuto . '> Auto-export published articles on save</label>';
+        $html .= '</div>';
         $html .= '</div>';
 
         $html .= '<div style="margin-top:1.5em;padding-top:1em;border-top:1px solid #eee">';
         $html .= '<label>Bulk Export</label>';
-        $html .= '<p>Push all ' . ($exportDrafts ? '' : 'published ') . 'articles to GitHub at once.</p>';
-        $html .= '<input name="bulkExport" type="submit" class="btn btn-secondary" value="Export all articles now">';
+        $html .= '<input name="bulkExportAll" type="submit" class="btn btn-secondary" value="Export everything">';
+        $html .= '<input name="bulkExportPublished" type="submit" class="btn btn-secondary" value="Export published only" style="margin-left:0.5em">';
         $html .= '</div>';
 
         if ($status) {
@@ -80,24 +82,28 @@ class pluginBluditGithub extends Plugin
     {
         parent::post();
 
-        // Ensure checkboxes are properly saved as boolean (Bludit might store them as strings)
-        $this->db['exportDrafts'] = (isset($_POST['exportDrafts']) && $_POST['exportDrafts']) ? true : false;
-        $this->db['autoExport']   = (isset($_POST['autoExport']) && $_POST['autoExport']) ? true : false;
+        $this->db['exportDraftsAuto']    = (isset($_POST['exportDraftsAuto']) && $_POST['exportDraftsAuto']) ? true : false;
+        $this->db['exportPublishedAuto'] = (isset($_POST['exportPublishedAuto']) && $_POST['exportPublishedAuto']) ? true : false;
         $this->dbSave();
 
-        if (!empty($_POST['bulkExport'])) {
-            $this->bulkExport();
+        if (!empty($_POST['bulkExportAll'])) {
+            $this->bulkExport(true);
+        } elseif (!empty($_POST['bulkExportPublished'])) {
+            $this->bulkExport(false);
         }
     }
 
     public function afterPageCreate($key)
     {
         try {
-            if (empty($key) || !$this->isConfigured() || !$this->getValue('autoExport')) {
+            if (empty($key) || !$this->isConfigured()) {
                 return;
             }
             $page = new Page($key);
-            if ($this->shouldExport($page)) {
+            $isDraft = $page->getValue('status') === 'draft';
+            $shouldAutoExport = $isDraft ? $this->getValue('exportDraftsAuto') : $this->getValue('exportPublishedAuto');
+
+            if ($shouldAutoExport) {
                 $this->exportPage($page);
             }
         } catch (Throwable $e) {
@@ -108,11 +114,14 @@ class pluginBluditGithub extends Plugin
     public function afterPageModify($key)
     {
         try {
-            if (empty($key) || !$this->isConfigured() || !$this->getValue('autoExport')) {
+            if (empty($key) || !$this->isConfigured()) {
                 return;
             }
             $page = new Page($key);
-            if ($this->shouldExport($page)) {
+            $isDraft = $page->getValue('status') === 'draft';
+            $shouldAutoExport = $isDraft ? $this->getValue('exportDraftsAuto') : $this->getValue('exportPublishedAuto');
+
+            if ($shouldAutoExport) {
                 $this->exportPage($page);
             }
         } catch (Throwable $e) {
@@ -130,8 +139,8 @@ class pluginBluditGithub extends Plugin
             $prefix = trim($this->getValue('path'), '/');
             $base   = ($prefix ? $prefix . '/' : '') . $key;
 
-            // Delete article/index.md
-            $mdPath = $base . '/article/index.md';
+            // Delete content/index.md
+            $mdPath = $base . '/content/index.md';
             $sha    = $this->getFileSha($mdPath);
             if ($sha) {
                 $this->githubRequest('DELETE', '/contents/' . $mdPath, [
@@ -161,14 +170,6 @@ class pluginBluditGithub extends Plugin
 
     // --- Private ---
 
-    private function shouldExport($page)
-    {
-        $isDraft          = $page->getValue('status') === 'draft';
-        $exportDraftsVal  = $this->getValue('exportDrafts');
-        $shouldExportDraft = ($exportDraftsVal === true || $exportDraftsVal === '1' || $exportDraftsVal === 1);
-
-        return (!$isDraft) || $shouldExportDraft;
-    }
 
     private function exportPage($page, $saveStatus = true)
     {
@@ -273,7 +274,7 @@ class pluginBluditGithub extends Plugin
         return ($data !== false && $httpCode === 200) ? $data : null;
     }
 
-    private function bulkExport()
+    private function bulkExport($includeDrafts = false)
     {
         if (!$this->isConfigured()) {
             $this->setStatus('Error: GitHub settings not configured.');
@@ -282,23 +283,21 @@ class pluginBluditGithub extends Plugin
 
         global $pages;
 
-        $includeDrafts = (bool)$this->getValue('exportDrafts');
-        $list          = $pages->getList(1, 9999, true, true, true, $includeDrafts, false);
-        $count         = 0;
+        $list  = $pages->getList(1, 9999, true, true, true, $includeDrafts, false);
+        $count = 0;
 
         foreach ($list as $key) {
             try {
                 $page = new Page($key);
-                if ($this->shouldExport($page)) {
-                    $this->exportPage($page, false);
-                    $count++;
-                }
+                $this->exportPage($page, false);
+                $count++;
             } catch (Exception $e) {
                 continue;
             }
         }
 
-        $this->setStatus(date('Y-m-d H:i:s') . " — Bulk export: {$count} articles pushed.");
+        $type = $includeDrafts ? 'everything' : 'published articles';
+        $this->setStatus(date('Y-m-d H:i:s') . " — Bulk export: {$count} {$type} pushed.");
     }
 
     private function buildMarkdown($page, $key, $rawContent = null)
@@ -381,7 +380,7 @@ class pluginBluditGithub extends Plugin
     private function getFilePath($key)
     {
         $prefix = trim($this->getValue('path'), '/');
-        return ($prefix ? $prefix . '/' : '') . $key . '/article/index.md';
+        return ($prefix ? $prefix . '/' : '') . $key . '/content/index.md';
     }
 
     private function getFileSha($filePath)

@@ -4,21 +4,21 @@ A [Bludit](https://www.bludit.com) plugin that automatically exports your blog a
 
 ## What it does
 
-Whenever you create, update, or delete an article in Bludit, the plugin pushes the change to a GitHub repository via the GitHub API. Each article is exported as its own folder, with the markdown file inside `article/` and images inside `img/`:
+Whenever you create, update, or delete an article in Bludit, the plugin pushes the change to a GitHub repository via the GitHub API. Each article is exported as its own folder, with the markdown file inside `content/` and images inside `img/`:
 
 ```
 my-article/
-  article/
+  content/
     index.md
   img/
     photo.png
     screenshot.jpg
 another-post/
-  article/
+  content/
     index.md
 ```
 
-Each `index.md` contains a YAML frontmatter block followed by the article content. Image references are written as relative paths from the `article/` subfolder:
+Each `index.md` contains a YAML frontmatter block followed by the article content. Image references are written as relative paths from the `content/` subfolder:
 
 ```markdown
 ---
@@ -51,18 +51,22 @@ Article content with images like ![](../img/photo.png)
 | Repository Name | The target repository (e.g. `my-blog`). |
 | Branch | Branch to push to (default: `main`). |
 | Path Prefix | Optional subfolder prefix. Leave empty to export at the repo root. |
-| Export drafts | When checked, draft articles are also exported. |
-| Auto-export on save | When checked, articles are automatically pushed to GitHub whenever you save or modify them. Uncheck to only use manual bulk export. |
+| Auto-export draft articles on save | When checked, draft articles are automatically pushed to GitHub when saved or modified. **Default is OFF**. |
+| Auto-export published articles on save | When checked, published articles are automatically pushed to GitHub when saved or modified. **Default is ON**. |
 
 ## Bulk export
 
-The settings page includes an **Export all articles now** button that pushes all your existing articles to GitHub in one go. Useful on first install or after changing the target repository.
+The settings page includes two export buttons:
+- **Export everything** — pushes all articles (both drafts and published) to GitHub in one go.
+- **Export published only** — pushes only published articles to GitHub.
+
+Useful on first install or after changing the target repository.
 
 ## Behavior
 
-- **On article save** (if auto-export is enabled): `article/index.md` is created or updated, and all images referenced in the content are uploaded to `img/`.
-- **On article delete** (if auto-export is enabled): both `article/index.md` and all files in `img/` are deleted (GitHub removes the empty folders automatically).
-- **Manual bulk export:** Use the "Export all articles now" button to push articles regardless of auto-export setting.
+- **On article save** (if auto-export is enabled): `content/index.md` is created or updated, and all images referenced in the content are uploaded to `img/`.
+- **On article delete** (if auto-export is enabled): both `content/index.md` and all files in `img/` are deleted (GitHub removes the empty folders automatically).
+- **Manual bulk export:** Use the "Export everything" or "Export published only" button to push articles regardless of auto-export setting.
 - **Errors** are displayed in the plugin settings panel and never interfere with Bludit's own save process.
 
 ## Requirements

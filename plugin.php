@@ -56,10 +56,10 @@ class pluginBluditGithub extends Plugin
         $html .= '<div style="margin-top:1.5em;padding-top:1em;border-top:1px solid #eee">';
         $html .= '<label>Auto-export settings</label>';
         $html .= '<div>';
-        $html .= '<label><input name="exportDraftsAuto" type="checkbox" value="1" ' . $exportDraftsAuto . '> Auto-export draft articles on save</label>';
+        $html .= '<label><input type="hidden" name="exportDraftsAuto" value="0"><input name="exportDraftsAuto" type="checkbox" value="1" ' . $exportDraftsAuto . '> Auto-export draft articles on save</label>';
         $html .= '</div>';
         $html .= '<div>';
-        $html .= '<label><input name="exportPublishedAuto" type="checkbox" value="1" ' . $exportPublishedAuto . '> Auto-export published articles on save</label>';
+        $html .= '<label><input type="hidden" name="exportPublishedAuto" value="0"><input name="exportPublishedAuto" type="checkbox" value="1" ' . $exportPublishedAuto . '> Auto-export published articles on save</label>';
         $html .= '</div>';
         $html .= '</div>';
 
@@ -81,10 +81,6 @@ class pluginBluditGithub extends Plugin
     public function post()
     {
         parent::post();
-
-        $this->db['exportDraftsAuto']    = (isset($_POST['exportDraftsAuto']) && $_POST['exportDraftsAuto']) ? true : false;
-        $this->db['exportPublishedAuto'] = (isset($_POST['exportPublishedAuto']) && $_POST['exportPublishedAuto']) ? true : false;
-        $this->db->save();
 
         if (!empty($_POST['bulkExportAll'])) {
             $this->bulkExport(true);

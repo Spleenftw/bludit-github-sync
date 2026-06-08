@@ -84,7 +84,7 @@ class pluginBluditGithub extends Plugin
 
         $this->db['exportDraftsAuto']    = (isset($_POST['exportDraftsAuto']) && $_POST['exportDraftsAuto']) ? true : false;
         $this->db['exportPublishedAuto'] = (isset($_POST['exportPublishedAuto']) && $_POST['exportPublishedAuto']) ? true : false;
-        $this->dbSave();
+        $this->db->save();
 
         if (!empty($_POST['bulkExportAll'])) {
             $this->bulkExport(true);

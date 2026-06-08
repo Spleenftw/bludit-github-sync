@@ -96,7 +96,7 @@ class pluginBluditGithub extends Plugin
                 return;
             }
             $page = new Page($key);
-            $isDraft = $page->getValue('status') === 'draft';
+            $isDraft = $page->getValue('type') === 'draft';
             $shouldAutoExport = $isDraft ? $this->getValue('exportDraftsAuto') : $this->getValue('exportPublishedAuto');
 
             if ($shouldAutoExport) {
@@ -114,7 +114,7 @@ class pluginBluditGithub extends Plugin
                 return;
             }
             $page = new Page($key);
-            $isDraft = $page->getValue('status') === 'draft';
+            $isDraft = $page->getValue('type') === 'draft';
             $shouldAutoExport = $isDraft ? $this->getValue('exportDraftsAuto') : $this->getValue('exportPublishedAuto');
 
             if ($shouldAutoExport) {

@@ -52,6 +52,7 @@ Article content with images like ![](../img/photo.png)
 | Branch | Branch to push to (default: `main`). |
 | Path Prefix | Optional subfolder prefix. Leave empty to export at the repo root. |
 | Export drafts | When checked, draft articles are also exported. |
+| Auto-export on save | When checked, articles are automatically pushed to GitHub whenever you save or modify them. Uncheck to only use manual bulk export. |
 
 ## Bulk export
 
@@ -59,8 +60,9 @@ The settings page includes an **Export all articles now** button that pushes all
 
 ## Behavior
 
-- **On article save:** `article/index.md` is created or updated, and all images referenced in the content are uploaded to `img/`.
-- **On article delete:** both `article/index.md` and all files in `img/` are deleted (GitHub removes the empty folders automatically).
+- **On article save** (if auto-export is enabled): `article/index.md` is created or updated, and all images referenced in the content are uploaded to `img/`.
+- **On article delete** (if auto-export is enabled): both `article/index.md` and all files in `img/` are deleted (GitHub removes the empty folders automatically).
+- **Manual bulk export:** Use the "Export all articles now" button to push articles regardless of auto-export setting.
 - **Errors** are displayed in the plugin settings panel and never interfere with Bludit's own save process.
 
 ## Requirements

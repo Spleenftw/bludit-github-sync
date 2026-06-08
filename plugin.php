@@ -11,6 +11,7 @@ class pluginBluditGithub extends Plugin
             'branch'       => 'main',
             'path'         => '',
             'exportDrafts' => false,
+            'autoExport'   => true,
         ];
     }
 
@@ -52,7 +53,14 @@ class pluginBluditGithub extends Plugin
         $html .= '</div>';
 
         $html .= '<div>';
-        $html .= '<label><input name="exportDrafts" type="checkbox" value="1" ' . $exportDrafts . '> Export draft articles</label>';
+        $html .= '<label><input name="exportDrafts" type="hidden" value="0">';
+        $html .= '<input name="exportDrafts" type="checkbox" value="1" ' . $exportDrafts . '> Export draft articles</label>';
+        $html .= '</div>';
+
+        $autoExport   = $this->getValue('autoExport') ? 'checked' : '';
+        $html .= '<div>';
+        $html .= '<label><input name="autoExport" type="hidden" value="0">';
+        $html .= '<input name="autoExport" type="checkbox" value="1" ' . $autoExport . '> Auto-export on save <em>(uncheck to only use manual bulk export)</em></label>';
         $html .= '</div>';
 
         $html .= '<div style="margin-top:1.5em;padding-top:1em;border-top:1px solid #eee">';
@@ -82,7 +90,7 @@ class pluginBluditGithub extends Plugin
     public function afterPageCreate($key)
     {
         try {
-            if (empty($key) || !$this->isConfigured()) {
+            if (empty($key) || !$this->isConfigured() || !$this->getValue('autoExport')) {
                 return;
             }
             $page = new Page($key);
@@ -97,7 +105,7 @@ class pluginBluditGithub extends Plugin
     public function afterPageModify($key)
     {
         try {
-            if (empty($key) || !$this->isConfigured()) {
+            if (empty($key) || !$this->isConfigured() || !$this->getValue('autoExport')) {
                 return;
             }
             $page = new Page($key);
